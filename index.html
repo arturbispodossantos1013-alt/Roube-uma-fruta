@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>🍎 Steal a Fruit</title>
+
+<style>
+
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+font-family:Arial,Helvetica,sans-serif;
+}
+
+body{
+background:#3aa655;
+overflow:hidden;
+}
+
+#world{
+position:relative;
+width:6000px;
+height:6000px;
+background:#6fcf5b;
+}
+
+#hud{
+position:fixed;
+left:10px;
+top:10px;
+background:#111;
+color:#fff;
+padding:10px;
+border-radius:12px;
+z-index:999;
+width:220px;
+}
+
+#hud div{
+margin:6px 0;
+}
+
+#menu{
+position:fixed;
+right:10px;
+top:10px;
+background:#111;
+padding:10px;
+border-radius:12px;
+z-index:999;
+}
+
+#menu button{
+display:block;
+width:180px;
+margin:6px 0;
+padding:10px;
+font-size:16px;
+border:none;
+border-radius:8px;
+cursor:pointer;
+background:#ff9800;
+color:white;
+}
+
+#menu button:hover{
+background:#ff6f00;
+}
+
+.player{
+position:absolute;
+width:40px;
+height:40px;
+background:#2196F3;
+border-radius:50%;
+left:3000px;
+top:3000px;
+z-index:10;
+}
+
+.base{
+position:absolute;
+left:2850px;
+top:2850px;
+width:300px;
+height:300px;
+background:#795548;
+border:6px solid #5d4037;
+border-radius:15px;
+display:flex;
+align-items:center;
+justify-content:center;
+font-size:40px;
+color:white;
+}
+
+.boss{
+position:absolute;
+width:80px;
+height:80px;
+border-radius:50%;
+display:flex;
+align-items:center;
+justify-content:center;
+font-size:42px;
+}
+
+.path{
+position:absolute;
+background:#c8b28a;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div id="hud">
+
+<div>💰 Dinheiro: $<span id="money">0</span></div>
+
+<div>⚡ Velocidade:
+<span id="speed">1</span>/500</div>
+
+<div>🍎 Frutas:
+<span id="fruits">0</span>/10</div>
+
+<div>💵 Money/s:
+<span id="income">0</span></div>
+
+</div>
+
+<div id="menu">
+
+<button id="shopBtn">
+🛒 Loja
+</button>
+
+<button id="indexBtn">
+📖 Índice
+</button>
+
+<button id="eventBtn">
+🎉 Eventos
+</button>
+
+<button id="adminBtn">
+🔐 Admin
+</button>
+
+</div>
+
+<div id="world">
+
+<div class="base">
+🏠
+</div>
+
+<div class="player" id="player"></div>
+
+<!-- Caminhos -->
+
+<div class="path"
+style="left:2990px;top:0;width:20px;height:2800px;"></div>
+
+<div class="path"
+style="left:2990px;top:3200px;width:20px;height:2800px;"></div>
+
+<div class="path"
+style="left:0;top:2990px;width:2800px;height:20px;"></div>
+
+<div class="path"
+style="left:3200px;top:2990px;width:2800px;height:20px;"></div>
+
+</div>
+
+<script>
+
+const state={
+
+money:0,
+
+speed:1,
+
+base:[],
+
+income:0,
+
+trail:null
+
+};
+
+const world=document.getElementById("world");
+
+const player=document.getElementById("player");
+
+function updateHUD(){
+
+money.textContent=
+state.money.toLocaleString("pt-BR");
+
+speed.textContent=
+state.speed;
+
+fruits.textContent=
+state.base.length;
+
+income.textContent=
+"$"+state.income+"/s";
+
+}
+
+updateHUD();/* ==========================
+   BOSS + FRUTAS
+========================== */
+
+const bosses=[
+{
+name:"Macaco",
+emoji:"🐵",
+x:3000,
+y:400,
+speed:2,
+minSpeed:1,
+fruit:"🍎"
+},
+{
+name:"Gorila",
+emoji:"🦍",
+x:5400,
+y:3000,
+speed:3,
+minSpeed:15,
+fruit:"🍇"
+},
+{
+name:"Tigre",
+emoji:"🐯",
+x:3000,
+y:5600,
+speed:4,
+minSpeed:30,
+fruit:"🍉"
+},
+{
+name:"Dragão",
+emoji:"🐉",
+x:600,
+y:3000,
+speed:5,
+minSpeed:50,
+fruit:"💎"
+},
+{
+name:"Tubarão",
+emoji:"🦈",
+x:900,
+y:900,
+speed:6,
+minSpeed:75,
+fruit:"🌊"
+},
+{
+name:"Alien",
+emoji:"👽",
+x:5200,
+y:5200,
+speed:8,
+minSpeed:100,
+fruit:"🌌"
+}
+];
+
+let carrying=null;
+let chasingBoss=null;
+
+bosses.forEach(b=>{
+
+const boss=document.createElement("div");
+boss.className="boss";
+boss.innerHTML=b.emoji;
+boss.style.left=b.x+"px";
+boss.style.top=b.y+"px";
+boss.style.background="#ff5252";
+world.appendChild(boss);
+
+b.element=boss;
+
+const fruit=document.createElement("div");
+
+fruit.style.position="absolute";
+fruit.style.left=(b.x+90)+"px";
+fruit.style.top=(b.y+20)+"px";
+fruit.style.fontSize="40px";
+fruit.style.cursor="pointer";
+fruit.innerHTML=b.fruit;
+
+fruit.onclick=()=>{
+
+if(carrying)return;
+
+if(state.speed<b.minSpeed){
+
+alert("Você precisa de velocidade "+b.minSpeed);
+
+return;
+
+}
+
+carrying=b;
+
+fruit.remove();
+
+chasingBoss=b;
+
+};
+
+world.appendChild(fruit);
+
+b.fruitElement=fruit;
+
+});
+
+/* ==========================
+   MOVIMENTO
+========================== */
+
+let px=3000;
+let py=3000;
+
+const keys={};
+
+document.addEventListener("keydown",e=>{
+
+keys[e.key.toLowerCase()]=true;
+
+});
+
+document.addEventListener("keyup",e=>{
+
+keys[e.key.toLowerCase()]=false;
+
+});
+
+setInterval(()=>{
+
+let vel=4+(state.speed/8);
+
+if(keys.w)py-=vel;
+if(keys.s)py+=vel;
+if(keys.a)px-=vel;
+if(keys.d)px+=vel;
+
+player.style.left=px+"px";
+player.style.top=py+"px";
+
+window.scrollTo(px-window.innerWidth/2,py-window.innerHeight/2);
+
+},16);
+
+/* ==========================
+   BOSS PERSEGUINDO
+========================== */
+
+setInterval(()=>{
+
+if(!chasingBoss)return;
+
+let dx=px-chasingBoss.x;
+let dy=py-chasingBoss.y;
+
+let d=Math.hypot(dx,dy);
+
+if(d>1){
+
+chasingBoss.x+=dx/d*chasingBoss.speed;
+chasingBoss.y+=dy/d*chasingBoss.speed;
+
+}
+
+chasingBoss.element.style.left=chasingBoss.x+"px";
+chasingBoss.element.style.top=chasingBoss.y+"px";
+
+if(d<60){
+
+alert("👹 O boss recuperou a fruta!");
+
+const fruit=document.createElement("div");
+
+fruit.style.position="absolute";
+fruit.style.left=(chasingBoss.x+90)+"px";
+fruit.style.top=(chasingBoss.y+20)+"px";
+fruit.style.fontSize="40px";
+fruit.style.cursor="pointer";
+fruit.innerHTML=chasingBoss.fruit;
+
+fruit.onclick=()=>{
+
+if(carrying)return;
+
+if(state.speed<chasingBoss.minSpeed){
+
+alert("Você precisa de velocidade "+chasingBoss.minSpeed);
+
+return;
+
+}
+
+carrying=chasingBoss;
+
+fruit.remove();
+
+};
+
+world.appendChild(fruit);
+
+chasingBoss.fruitElement=fruit;
+
+carrying=null;
+chasingBoss=null;
+
+}
+
+},30);/* ==========================
+   BASE + DINHEIRO
+========================== */
+
+const BASE = {
+    x1: 2850,
+    y1: 2850,
+    x2: 3150,
+    y2: 3150
+};
+
+const fruitData = {
+    "🍎": {name:"Maçã", money:1},
+    "🍇": {name:"Uva", money:3},
+    "🍉": {name:"Melancia", money:8},
+    "💎": {name:"Fruta Rubi", money:20},
+    "🌊": {name:"Fruta Oceânica", money:45},
+    "🌌": {name:"Fruta Galáctica", money:100}
+};
+
+function insideBase(){
+
+    return(
+        px>BASE.x1 &&
+        px<BASE.x2 &&
+        py>BASE.y1 &&
+        py<BASE.y2
+    );
+
+}
+
+setInterval(()=>{
+
+    if(!carrying) return;
+
+    if(!insideBase()) return;
+
+    if(state.base.length>=10){
+
+        alert("Sua base está cheia!");
+
+        return;
+
+    }
+
+    state.base.push(carrying.fruit);
+
+    state.income+=fruitData[carrying.fruit].money;
+
+    carrying=null;
+
+    chasingBoss=null;
+
+    updateHUD();
+
+    alert("🍎 Fruta entregue!");
+
+},100);
+
+setInterval(()=>{
+
+    state.money+=state.income;
+
+    updateHUD();
+
+},1000);
+
+/* ==========================
+   VENDER FRUTA
+========================== */
+
+function sellFruit(index){
+
+    if(index<0) return;
+
+    if(index>=state.base.length) return;
+
+    const emoji=state.base[index];
+
+    state.income-=fruitData[emoji].money;
+
+    state.base.splice(index,1);
+
+    updateHUD();
+
+  }/* ==========================
+   LOJA
+========================== */
+
+const trails={
+
+red:{
+name:"🔴 Trail Vermelha",
+price:50000,
+mult:2
+},
+
+blue:{
+name:"🔵 Trail Azul",
+price:500000,
+mult:3
+},
+
+galaxy:{
+name:"🌌 Trail Galáctica",
+price:5000000,
+mult:6
+}
+
+};
+
+function openShop(){
+
+let txt="🛒 LOJA\n\n";
+
+txt+="Velocidade: "+state.speed+"/500\n";
+txt+="Preço: $"+((state.speed+1)*100)+"\n\n";
+
+txt+="Digite:\n";
+txt+="1 = Comprar Velocidade\n";
+txt+="2 = Trail Vermelha\n";
+txt+="3 = Trail Azul\n";
+txt+="4 = Trail Galáctica";
+
+const op=prompt(txt);
+
+if(op=="1")buySpeed();
+
+if(op=="2")buyTrail("red");
+
+if(op=="3")buyTrail("blue");
+
+if(op=="4")buyTrail("galaxy");
+
+}
+
+document.getElementById("shopBtn").onclick=openShop;
+
+function buySpeed(){
+
+if(state.speed>=500){
+
+alert("Velocidade máxima!");
+
+return;
+
+}
+
+const price=(state.speed+1)*100;
+
+if(state.money<price){
+
+alert("Dinheiro insuficiente!");
+
+return;
+
+}
+
+state.money-=price;
+
+state.speed++;
+
+updateHUD();
+
+alert("⚡ Velocidade "+state.speed);
+
+}
+
+function buyTrail(id){
+
+const t=trails[id];
+
+if(state.money<t.price){
+
+alert("Dinheiro insuficiente!");
+
+return;
+
+}
+
+state.money-=t.price;
+
+state.trail=id;
+
+updateHUD();
+
+alert("Você equipou "+t.name);
+
+}
+
+function getSpeed(){
+
+let s=state.speed;
+
+if(state.trail){
+
+s*=trails[state.trail].mult;
+
+}
+
+return s;
+
+  }/* ==========================
+   ÍNDICE DAS FRUTAS
+========================== */
+
+const fruitIndex={
+
+Macaco:[
+{name:"🍎 Maçã",rarity:"Comum",money:1},
+{name:"🍌 Banana",rarity:"Comum",money:2},
+{name:"🍊 Laranja",rarity:"Rara",money:4}
+],
+
+Gorila:[
+{name:"🍇 Uva",rarity:"Rara",money:8},
+{name:"🥥 Coco",rarity:"Épica",money:12},
+{name:"🍍 Abacaxi",rarity:"Épica",money:20}
+],
+
+Tigre:[
+{name:"🍉 Melancia",rarity:"Épica",money:35},
+{name:"🥭 Manga",rarity:"Lendária",money:50},
+{name:"🍐 Pera Dourada",rarity:"Lendária",money:80}
+],
+
+Dragão:[
+{name:"❤️ Fruta Rubi",rarity:"Lendária",money:120},
+{name:"💙 Fruta Safira",rarity:"Mítica",money:180},
+{name:"💜 Fruta Ametista",rarity:"Mítica",money:250}
+],
+
+Tubarão:[
+{name:"🌊 Fruta Oceânica",rarity:"Mítica",money:350},
+{name:"❄️ Fruta Congelada",rarity:"Mítica",money:450},
+{name:"⚡ Fruta Elétrica",rarity:"Secreta",money:600}
+],
+
+Alien:[
+{name:"🌌 Fruta Galáctica",rarity:"Secreta",money:800},
+{name:"☄️ Fruta Cósmica",rarity:"Secreta",money:1200},
+{name:"🌠 Fruta Estelar",rarity:"Secreta",money:1800},
+{name:"🪐 Fruta Planetária",rarity:"Secreta",money:2500},
+{name:"🌈 Fruta Universal",rarity:"Secreta",money:5000}
+]
+
+};
+
+function openIndex(){
+
+let txt="🍎 ÍNDICE DAS FRUTAS\n\n";
+
+for(const boss in fruitIndex){
+
+txt+="👹 "+boss+"\n";
+
+fruitIndex[boss].forEach(f=>{
+
+txt+=
+f.name+
+" | "+
+f.rarity+
+" | $"+
+f.money+
+"/s\n";
+
+});
+
+txt+="\n";
+
+}
+
+alert(txt);
+
+}
+
+document
+.getElementById("indexBtn")
+.onclick=openIndex;/* ==========================
+   EVENTOS
+========================== */
+
+const events={
+
+money2x:false,
+
+rainbow:false,
+
+cosmic:false,
+
+galaxy:false,
+
+fire:false,
+
+wind:false,
+
+pizza:false,
+
+luck2x:false,
+
+luck4x:false,
+
+luck6x:false,
+
+luck8x:false
+
+};
+
+function startEvent(id){
+
+events[id]=true;
+
+alert("🎉 Evento iniciado!");
+
+setTimeout(()=>{
+
+events[id]=false;
+
+alert("Evento encerrado!");
+
+},300000);
+
+}
+
+function getMoneyMultiplier(){
+
+let m=1;
+
+if(events.money2x)m*=2;
+
+if(events.rainbow)m*=3;
+
+if(events.cosmic)m*=4;
+
+if(events.galaxy)m*=5;
+
+if(events.fire)m*=3;
+
+if(events.wind)m*=3;
+
+if(events.pizza)m*=8;
+
+return m;
+
+}
+
+function getLuckMultiplier(){
+
+let l=1;
+
+if(events.luck2x)l*=2;
+
+if(events.luck4x)l*=4;
+
+if(events.luck6x)l*=6;
+
+if(events.luck8x)l*=8;
+
+return l;
+
+}
+
+/* ==========================
+   DINHEIRO COM EVENTOS
+========================== */
+
+setInterval(()=>{
+
+state.money+=Math.floor(
+state.income*
+getMoneyMultiplier()
+);
+
+updateHUD();
+
+},1000);
+
+/* ==========================
+   MENU EVENTOS
+========================== */
+
+function openEvents(){
+
+let op=prompt(
+
+"🎉 EVENTOS\n\n"+
+
+"1 = 💰 2X Money\n"+
+
+"2 = 🌈 Arco-Íris\n"+
+
+"3 = 🌌 Cósmico\n"+
+
+"4 = 🌠 Galáxia\n"+
+
+"5 = 🔥 Fogo\n"+
+
+"6 = 🌪️ Vento\n"+
+
+"7 = 🍕 Pizza\n"+
+
+"8 = 🍀 Sorte 2X\n"+
+
+"9 = 🍀 Sorte 4X\n"+
+
+"10 = 🍀 Sorte 6X\n"+
+
+"11 = 🍀 Sorte 8X"
+
+);
+
+switch(op){
+
+case"1":startEvent("money2x");break;
+
+case"2":startEvent("rainbow");break;
+
+case"3":startEvent("cosmic");break;
+
+case"4":startEvent("galaxy");break;
+
+case"5":startEvent("fire");break;
+
+case"6":startEvent("wind");break;
+
+case"7":startEvent("pizza");break;
+
+case"8":startEvent("luck2x");break;
+
+case"9":startEvent("luck4x");break;
+
+case"10":startEvent("luck6x");break;
+
+case"11":startEvent("luck8x");break;
+
+}
+
+}
+
+document
+.getElementById("eventBtn")
+.onclick=openEvents;
+
+console.log("Sistema de eventos carregado!");/* ==========================
+   PAINEL ADMIN
+========================== */
+
+const ADMIN_PASSWORD="12345";
+
+function openAdmin(){
+
+const pass=prompt("🔐 Senha do administrador:");
+
+if(pass!==ADMIN_PASSWORD){
+
+alert("Senha incorreta!");
+
+return;
+
+}
+
+const op=prompt(
+
+"👑 PAINEL ADMIN\n\n"+
+
+"1 = Dar dinheiro\n"+
+
+"2 = Dar velocidade\n"+
+
+"3 = Spawnar fruta\n"+
+
+"4 = Ativar evento\n"+
+
+"5 = Mensagem global\n"+
+
+"6 = Teleportar"
+
+);
+
+switch(op){
+
+case "1":
+
+let money=Number(prompt("Quanto dinheiro?"));
+
+if(!isNaN(money)){
+
+state.money+=money;
+
+updateHUD();
+
+alert("💰 Dinheiro adicionado!");
+
+}
+
+break;
+
+case "2":
+
+let speed=Number(prompt("Velocidade:"));
+
+if(!isNaN(speed)){
+
+state.speed=Math.min(500,state.speed+speed);
+
+updateHUD();
+
+alert("⚡ Velocidade adicionada!");
+
+}
+
+break;
+
+case "3":
+
+spawnAdminFruit();
+
+break;
+
+case "4":
+
+openEvents();
+
+break;
+
+case "5":
+
+let msg=prompt("Mensagem:");
+
+if(msg){
+
+alert("📢 "+msg);
+
+}
+
+break;
+
+case "6":
+
+teleportBoss();
+
+break;
+
+}
+
+}
+
+document
+.getElementById("adminBtn")
+.onclick=openAdmin;
+
+/* ==========================
+   SPAWN FRUTA
+========================== */
+
+function spawnAdminFruit(){
+
+const emoji=prompt(
+
+"Digite o emoji da fruta:\n\n🍎 🍌 🍇 🍉 💎 🌊 🌌"
+
+);
+
+if(!emoji)return;
+
+if(state.base.length>=10){
+
+alert("Base cheia!");
+
+return;
+
+}
+
+state.base.push(emoji);
+
+if(fruitData[emoji]){
+
+state.income+=fruitData[emoji].money;
+
+}
+
+updateHUD();
+
+alert("🍎 Fruta adicionada!");
+
+}
+
+/* ==========================
+   TELEPORT
+========================== */
+
+function teleportBoss(){
+
+let txt="";
+
+bosses.forEach((b,i)=>{
+
+txt+=(i+1)+" = "+b.name+"\n";
+
+});
+
+const op=Number(prompt(txt));
+
+if(!bosses[op-1])return;
+
+px=bosses[op-1].x;
+
+py=bosses[op-1].y;
+
+player.style.left=px+"px";
+player.style.top=py+"px";
+
+window.scrollTo(
+
+px-window.innerWidth/2,
+
+py-window.innerHeight/2
+
+);
+
+alert("Teleportado!");
+
+}
+
+console.log("Painel Admin carregado!");/* ==========================
+   SAVE AUTOMÁTICO
+========================== */
+
+function saveGame(){
+
+const save={
+
+money:state.money,
+
+speed:state.speed,
+
+base:state.base,
+
+income:state.income,
+
+trail:state.trail
+
+};
+
+localStorage.setItem(
+
+"StealAFruit_Save",
+
+JSON.stringify(save)
+
+);
+
+}
+
+function loadGame(){
+
+const save=
+
+localStorage.getItem(
+
+"StealAFruit_Save"
+
+);
+
+if(!save)return;
+
+const data=JSON.parse(save);
+
+state.money=data.money||0;
+
+state.speed=data.speed||1;
+
+state.base=data.base||[];
+
+state.income=data.income||0;
+
+state.trail=data.trail||null;
+
+updateHUD();
+
+}
+
+loadGame();
+
+setInterval(saveGame,5000);
+
+/* ==========================
+   RESETAR SAVE
+========================== */
+
+function resetSave(){
+
+if(!confirm(
+
+"Apagar todo o progresso?"
+
+))return;
+
+localStorage.removeItem(
+
+"StealAFruit_Save"
+
+);
+
+location.reload();
+
+}
+
+/* ==========================
+   AUTO SAVE AO FECHAR
+========================== */
+
+window.addEventListener(
+
+"beforeunload",
+
+saveGame
+
+);
+
+console.log(
+
+"💾 Save carregado!"
+
+);/* ==========================
+   INTERFACE
+========================== */
+
+const panel=document.createElement("div");
+
+panel.id="panel";
+
+panel.style.position="fixed";
+panel.style.left="50%";
+panel.style.top="50%";
+panel.style.transform="translate(-50%,-50%)";
+panel.style.width="500px";
+panel.style.maxHeight="600px";
+panel.style.overflow="auto";
+panel.style.background="#1d1d1d";
+panel.style.color="white";
+panel.style.padding="20px";
+panel.style.borderRadius="15px";
+panel.style.display="none";
+panel.style.zIndex="99999";
+panel.style.boxShadow="0 0 30px black";
+
+document.body.appendChild(panel);
+
+function openPanel(title,html){
+
+panel.innerHTML=`
+
+<h2>${title}</h2>
+
+<hr><br>
+
+${html}
+
+<br><br>
+
+<button onclick="closePanel()">
+
+Fechar
+
+</button>
+
+`;
+
+panel.style.display="block";
+
+}
+
+function closePanel(){
+
+panel.style.display="none";
+
+}
+
+/* ==========================
+   NOTIFICAÇÃO
+========================== */
+
+const toast=document.createElement("div");
+
+toast.style.position="fixed";
+toast.style.bottom="20px";
+toast.style.left="50%";
+toast.style.transform="translateX(-50%)";
+toast.style.background="#111";
+toast.style.color="white";
+toast.style.padding="12px";
+toast.style.borderRadius="10px";
+toast.style.display="none";
+toast.style.zIndex="999999";
+
+document.body.appendChild(toast);
+
+function notify(msg){
+
+toast.innerHTML=msg;
+
+toast.style.display="block";
+
+clearTimeout(window.toastTimer);
+
+window.toastTimer=setTimeout(()=>{
+
+toast.style.display="none";
+
+},2500);
+
+}
+
+/* ==========================
+   SUBSTITUIR ALERTS
+========================== */
+
+console.log("Interface carregada!");/* ==========================
+   CONQUISTAS
+========================== */
+
+const achievements={
+
+firstFruit:false,
+
+tenFruits:false,
+
+hundredMoney:false,
+
+speed100:false,
+
+allBosses:false
+
+};
+
+function unlock(id,name){
+
+if(achievements[id])return;
+
+achievements[id]=true;
+
+notify("🏆 Conquista desbloqueada: "+name);
+
+saveGame();
+
+}
+
+function checkAchievements(){
+
+if(state.base.length>=1){
+
+unlock(
+
+"firstFruit",
+
+"Primeira Fruta"
+
+);
+
+}
+
+if(state.base.length>=10){
+
+unlock(
+
+"tenFruits",
+
+"Base Lotada"
+
+);
+
+}
+
+if(state.money>=100){
+
+unlock(
+
+"hundredMoney",
+
+"Primeiros $100"
+
+);
+
+}
+
+if(state.speed>=100){
+
+unlock(
+
+"speed100",
+
+"Velocidade 100"
+
+);
+
+}
+
+}
+
+setInterval(checkAchievements,1000);
+
+/* ==========================
+   MENU CONQUISTAS
+========================== */
+
+function openAchievements(){
+
+let txt="<h2>🏆 Conquistas</h2><br>";
+
+for(const k in achievements){
+
+txt+=
+
+(k+" : "+(
+
+achievements[k]?
+
+"✅"
+
+:"❌"
+
+))+"<br>";
+
+}
+
+openPanel(
+
+"🏆 Conquistas",
+
+txt
+
+);
+
+}
+
+const achBtn=document.createElement("button");
+
+achBtn.textContent="🏆 Conquistas";
+
+achBtn.onclick=openAchievements;
+
+document
+
+.getElementById("menu")
+
+.appendChild(achBtn);
+
+console.log("🏆 Sistema de conquistas carregado!");/* ==========================
+   POLIMENTO VISUAL
+========================== */
+
+/* Câmera seguindo o jogador */
+
+setInterval(()=>{
+
+window.scrollTo({
+
+left:px-window.innerWidth/2,
+
+top:py-window.innerHeight/2,
+
+behavior:"smooth"
+
+});
+
+},30);
+
+/* Mostrar trail */
+
+const trail=document.createElement("div");
+
+trail.style.position="absolute";
+trail.style.width="20px";
+trail.style.height="20px";
+trail.style.borderRadius="50%";
+trail.style.pointerEvents="none";
+
+world.appendChild(trail);
+
+setInterval(()=>{
+
+trail.style.left=(px+10)+"px";
+trail.style.top=(py+10)+"px";
+
+switch(state.trail){
+
+case "red":
+trail.style.background="red";
+break;
+
+case "blue":
+trail.style.background="cyan";
+break;
+
+case "galaxy":
+trail.style.background="purple";
+break;
+
+default:
+trail.style.background="transparent";
+
+}
+
+},20);
+
+/* Dinheiro automático */
+
+setInterval(()=>{
+
+document.title=
+
+"🍎 Steal a Fruit | $" +
+
+state.money.toLocaleString("pt-BR");
+
+},500);
+
+/* Mensagem inicial */
+
+notify("🍎 Bem-vindo ao Steal a Fruit!");
+
+/* Salvar sempre */
+
+setInterval(()=>{
+
+saveGame();
+
+},5000);
+
+console.log("✨ Polimento carregado!");/* ==========================
+   FINAL DO JOGO
+========================== */
+
+// Atualiza HUD ao iniciar
+updateHUD();
+
+// Mensagem inicial
+notify("🍎 Steal a Fruit carregado com sucesso!");
+
+// Inicia o autosave
+saveGame();
+
+console.log("✅ Steal a Fruit iniciado!");
+
+</script>
+
+</body>
+</html>
